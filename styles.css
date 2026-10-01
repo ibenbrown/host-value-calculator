@@ -211,6 +211,32 @@ input[type="number"]:focus,
   font-weight: 700;
 }
 
+.reco-title {
+  margin: 0 0 8px;
+  font-size: 28px;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+.reco-sub {
+  margin: 0;
+  font-size: 16px;
+}
+
+.suggest-rate {
+  margin: 8px 0 4px;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+  color: var(--coral);
+}
+
+.hourly-support p {
+  margin: 6px 0;
+  font-size: 15px;
+}
+
 .metric-label {
   margin: 0;
   font-size: 14px;

@@ -326,6 +326,64 @@ function renderWork() {
     </form>`;
 }
 
+function snapPercent(rate, target) {
+  if (!rate) return 0;
+  const raw = ((target - rate) / rate) * 100;
+  const snapped = Math.round(raw / 5) * 5;
+  return Math.max(-10, Math.min(25, snapped));
+}
+
+function recommendation(rate, nights, band) {
+  const lowOccupancy = nights < 12;
+  const below = rate < band.low;
+  const above = rate > band.high;
+  const none = (headline, subline) => ({ suggested: null, pct: 0, headline, subline });
+
+  if (nights <= 0) {
+    return none(
+      "Your rate looks right for now.",
+      "Add nights from a normal month before treating a higher rate as a good idea. The view below shows the market band only."
+    );
+  }
+
+  if (above || lowOccupancy) {
+    let subline = "You're already above similar listings. The view below shows what the current rate pays you.";
+    if (lowOccupancy && above) {
+      subline = "You're already above similar listings, and bookings are light. A higher rate could slow them further. The view below shows what the current rate pays you.";
+    } else if (lowOccupancy) {
+      subline = "With fewer nights booked, a higher rate could slow bookings further. The view below shows what the current rate pays you.";
+    }
+    return none("Your rate looks right for now.", subline);
+  }
+
+  if (below) {
+    const midpoint = (band.low + band.high) / 2;
+    const target = Math.min(midpoint, rate * 1.3);
+    const pct = snapPercent(rate, target);
+    if (pct <= 0) return none("Your rate looks right for now.", "You're already close to similar listings. The view below shows what the current rate pays you.");
+    const suggested = Math.round(rate * (1 + pct / 100));
+    return {
+      suggested,
+      pct,
+      headline: "You could be charging more.",
+      subline: `Similar listings in your market go for ${money(band.low)}–${money(band.high)} a night. You're at ${money(rate)} with strong bookings. A rate of ${money(suggested)} keeps you competitive and better reflects what your listing earns.`,
+    };
+  }
+
+  const target = Math.min(rate * 1.1, band.high);
+  const pct = snapPercent(rate, target);
+  if (pct <= 0) {
+    return none("Your rate looks right for now.", "You're near the top of the range for similar listings. The view below shows what the current rate pays you.");
+  }
+  const suggested = Math.round(rate * (1 + pct / 100));
+  return {
+    suggested,
+    pct,
+    headline: "Your rate is competitive. A small bump may be worth testing.",
+    subline: `You're inside the range for similar listings. With ${nights} nights booked, you have room to test. A rate of ${money(suggested)} is a modest increase.`,
+  };
+}
+
 function effortCopy(hours, typical) {
   if (hours > typical * 1.5) {
     return "You are spending more time per stay than this benchmark. Worth asking which of these hours guests actually notice.";
@@ -340,8 +398,13 @@ function renderResults() {
   const rate = Number(state.rate);
   const nights = Number(state.nights);
   const band = marketBand();
+  const rec = recommendation(rate, nights, band);
+  state.hasSuggestion = rec.suggested !== null;
+  state.suggestedPct = rec.pct;
+  state.priceDelta = rec.pct;
+
   const current = monthMath(rate, nights);
-  const pct = Number(state.priceDelta);
+  const pct = rec.pct;
   const factor = OCC[String(pct)];
   const newRate = rate * (1 + pct / 100);
   const newNights = nights * factor;
@@ -354,18 +417,23 @@ function renderResults() {
   if (rate < band.low) place = `Your rate of ${money(rate)} is under this simulated band.`;
   if (rate > band.high) place = `Your rate of ${money(rate)} is above this simulated band.`;
 
-  const allInLine = current.hourly !== null && current.allInHourly !== null
-    ? `<p class="plain" id="all-in">Including listing management: ${hourlyText(current.allInHourly)} all-in.</p>`
-    : "";
+  const sliderTitle = rec.suggested !== null ? "Adjust the suggestion" : "What if the nightly rate moved?";
+  const sliderNote = rec.suggested !== null
+    ? "Drag to adjust. The occupancy estimate is a model, not a guarantee."
+    : "Occupancy response is a placeholder. A real test would measure it. This view is here so a higher rate is not automatically more work.";
 
-  const hourlyBlock = nights <= 0
-    ? `<p class="metric">—</p><p class="metric-label">Add nights from a normal month to see an hourly rate.</p>`
-    : current.hourly === null
-      ? `<p class="metric">—</p><p class="metric-label">Add your hours to see a rate.</p>`
-      : `<p class="metric">${hourlyText(current.hourly)}</p>
-         <p class="metric-label">Per stay, after the 15% fee and costs</p>
-         <p class="plain">About ${money(current.net)} this month, spread across ${current.hours.toFixed(1)} hours of stay work.</p>
-         ${allInLine}`;
+  const hourlyNow = current.hourly === null
+    ? `<p id="hourly-now">Add your hours to see what the rate pays per hour.</p>`
+    : `<p id="hourly-now">At your current rate: <strong>${hourlyText(current.hourly)}</strong> per stay</p>`;
+
+  const hourlyNext = rec.suggested !== null && next.hourly !== null
+    ? `<p id="hourly-next">At the suggested rate: <strong>${hourlyText(next.hourly)}</strong> per stay</p>`
+    : `<p id="hourly-next" hidden></p>`;
+
+  const allInValue = (rec.suggested !== null ? next.allInHourly : current.allInHourly);
+  const allInLine = allInValue === null
+    ? ""
+    : `<p id="all-in">Including listing management: <strong>${hourlyText(allInValue)}</strong> all-in.</p>`;
 
   const noisy = nights > 0 && nights < STAY_NIGHTS[state.property]
     ? `<p class="plain">Fewer nights than a typical stay, so this month’s hourly rate is noisy.</p>`
@@ -375,9 +443,25 @@ function renderResults() {
 
   app.innerHTML = `
     <section class="card">
-      <h2>What the current rate pays you</h2>
-      ${hourlyBlock}
-      ${noisy}
+      <h2 class="reco-title" id="reco-title">${rec.headline}</h2>
+      <p class="reco-sub" id="reco-sub">${rec.subline}</p>
+
+      <div class="block">
+        <h3>${sliderTitle}</h3>
+        <p class="suggest-rate" id="slider-read">${scenarioRead(pct, newRate, newNights)}</p>
+        <input id="priceDelta" type="range" min="-10" max="25" step="5" value="${pct}" aria-label="Price change" />
+        <p class="delta ${deltaClass}" id="delta">${deltaSentence(delta)}</p>
+        <p class="plain">${sliderNote}</p>
+      </div>
+
+      <div class="block hourly-support">
+        <h3>What this means for your time</h3>
+        ${hourlyNow}
+        ${hourlyNext}
+        ${allInLine}
+        ${noisy}
+        <p class="plain">This is what the platform fee, your costs, and your hours add up to. A higher rate means the same work pays more per hour.</p>
+      </div>
 
       <div class="block">
         <p class="tag">Simulated</p>
@@ -386,20 +470,11 @@ function renderResults() {
         <p class="plain">${place}</p>
       </div>
 
-      <div class="block">
-        <h3>What if the nightly rate moved?</h3>
-        <p class="plain" id="slider-read">${scenarioRead(pct, newRate, newNights)}</p>
-        <input id="priceDelta" type="range" min="-10" max="25" step="5" value="${pct}" aria-label="Price change" />
-        <p class="delta ${deltaClass}" id="delta">${deltaSentence(delta)}</p>
-        <p class="plain">Occupancy response is a placeholder. A real test would measure it. This view is here so a higher rate is not automatically more work.</p>
-      </div>
-
-      <div class="block">
-        <p class="tag">Simulated</p>
-        <h3>Time versus a typical host</h3>
-        <p class="plain">You logged ${hours.toFixed(1)} hours per stay, not counting listing management. The benchmark for this listing is ${typical} hours.</p>
-        <p class="plain">${effortCopy(hours, typical)}</p>
-      </div>
+      <details class="assumptions">
+        <summary>Time versus a typical host</summary>
+        <p>You logged ${hours.toFixed(1)} hours per stay, not counting listing management. The benchmark for this listing is ${typical} hours.</p>
+        <p>${effortCopy(hours, typical)}</p>
+      </details>
 
       <div class="block">
         <p class="plain"><strong>In the product, the next step would be a draft of a new rate the host can accept or ignore.</strong> This prototype stops at the math.</p>
@@ -407,7 +482,7 @@ function renderResults() {
 
       <details class="assumptions">
         <summary>How these numbers are calculated</summary>
-        <p>Host payout is nightly rate times nights, minus 15%. Stays are nights divided by ${STAY_NIGHTS[state.property]} (the assumed stay length for this property type). Per-stay costs scale with stays. The big hourly rate is payout minus costs, divided by stay hours only. The all-in rate adds hours you spend between stays, which are monthly and do not grow with each booking. The market band starts from a fixed table and rises 12% for each bedroom after the first. Occupancy steps are fixed: +10% price assumes 94% of current nights, +15% assumes 90%, and so on.</p>
+        <p>The suggestion uses where the nightly rate sits against a simulated band for similar listings, and whether nights booked look strong. It does not use hours worked. Hours show up only in the pay-per-hour lines. A raise is capped so it cannot jump more than 30% and cannot go past the slider, which tops out at 25%. Host payout is nightly rate times nights, minus 15%. Stays are nights divided by ${STAY_NIGHTS[state.property]}. Per-stay costs scale with stays. The per-stay hourly rate is payout minus costs, divided by stay hours. The all-in rate adds monthly hours between stays. Occupancy steps are fixed: +10% price assumes 94% of current nights, +15% assumes 90%, +25% assumes 82%.</p>
       </details>
 
       <div class="row">
@@ -435,11 +510,26 @@ function paintScenario() {
   const delta = next.net - current.net;
   const read = document.getElementById("slider-read");
   const deltaEl = document.getElementById("delta");
+  const hourlyNext = document.getElementById("hourly-next");
+  const allIn = document.getElementById("all-in");
   if (!read || !deltaEl) return;
   read.textContent = scenarioRead(pct, newRate, newNights);
   deltaEl.textContent = deltaSentence(delta);
   deltaEl.classList.toggle("up", delta >= 0);
   deltaEl.classList.toggle("down", delta < 0);
+  if (hourlyNext) {
+    if (pct === 0 || next.hourly === null) {
+      hourlyNext.hidden = true;
+      hourlyNext.textContent = "";
+    } else {
+      const label = state.hasSuggestion && pct === state.suggestedPct ? "At the suggested rate" : "At this rate";
+      hourlyNext.hidden = false;
+      hourlyNext.innerHTML = `${label}: <strong>${hourlyText(next.hourly)}</strong> per stay`;
+    }
+  }
+  if (allIn && next.allInHourly !== null) {
+    allIn.innerHTML = `Including listing management: <strong>${hourlyText(next.allInHourly)}</strong> all-in.`;
+  }
 }
 
 function setSelfClean(yes) {
