@@ -25,23 +25,43 @@ const OCC = {
   25: 0.82,
 };
 
-const state = {
-  step: 1,
-  city: "mid",
-  property: "entire",
-  bedrooms: 2,
-  rate: "",
-  nights: "",
-  before: 1.5,
-  during: 0.5,
-  after: 2,
-  selfClean: true,
-  cleanHours: 3,
-  cleanCost: 75,
-  otherCost: 25,
-  priceDelta: 10,
-  error: "",
-};
+const CITY_LABEL = { major: "Major metro", mid: "Mid-size city", small: "Smaller market" };
+const PROPERTY_LABEL = { entire: "Entire home", room: "Private room", unique: "Unique stay" };
+
+const HOUR_PER_STAY = ["msgBefore", "prepCheckin", "guestDuring", "checkoutReset", "cleaning", "reviewFollowup"];
+const HOUR_MONTHLY = ["calendarPricing", "maintenanceAdmin"];
+const COST_FIELDS = ["cleaningCost", "suppliesCost", "laundryCost", "repairsCost"];
+
+const state = {};
+
+function applyDefaults() {
+  Object.assign(state, {
+    step: 1,
+    editingListing: false,
+    city: "mid",
+    property: "entire",
+    bedrooms: 2,
+    rate: 119,
+    nights: 20,
+    msgBefore: 0.5,
+    prepCheckin: 1,
+    guestDuring: 0.5,
+    checkoutReset: 0.5,
+    cleaning: 2.5,
+    reviewFollowup: 0.5,
+    selfClean: true,
+    calendarPricing: 2,
+    maintenanceAdmin: 1,
+    cleaningCost: 0,
+    suppliesCost: 0,
+    laundryCost: 0,
+    repairsCost: 0,
+    priceDelta: 0,
+    error: "",
+  });
+}
+
+applyDefaults();
 
 const app = document.getElementById("app");
 
@@ -67,8 +87,13 @@ function hourlyText(n) {
   return money(n) + "/hr";
 }
 
+function hourValue(n) {
+  const rounded = Math.round(Number(n) * 2) / 2;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
 function choice(name, value, label, current) {
-  const pressed = current === value ? "true" : "false";
+  const pressed = String(current) === String(value) ? "true" : "false";
   return `<button type="button" data-set="${name}" data-value="${value}" aria-pressed="${pressed}">${label}</button>`;
 }
 
@@ -77,6 +102,20 @@ function numField(name, label, value, step, min, max) {
     <div class="field">
       <label for="${name}">${label}</label>
       <input id="${name}" name="${name}" type="number" inputmode="decimal" step="${step}" min="${min}" max="${max}" value="${value}" />
+    </div>`;
+}
+
+function activityRow(id, label, value, step, min, max, unit) {
+  const shown = unit === "hr" ? hourValue(value) : String(Math.round(Number(value) || 0));
+  return `
+    <div class="activity">
+      <label for="${id}">${label}</label>
+      <div class="stepper">
+        <button type="button" data-bump="${id}" data-step="${step}" data-min="${min}" data-max="${max}" data-dir="-1" aria-label="Decrease ${label}">−</button>
+        <input id="${id}" type="number" inputmode="decimal" step="${step}" min="${min}" max="${max}" value="${shown}" />
+        <button type="button" data-bump="${id}" data-step="${step}" data-min="${min}" data-max="${max}" data-dir="1" aria-label="Increase ${label}">+</button>
+        <span class="unit">${unit}</span>
+      </div>
     </div>`;
 }
 
@@ -95,26 +134,46 @@ function marketBand() {
   return { low: Math.round(low * mult), high: Math.round(high * mult) };
 }
 
-function hoursPerStay() {
-  const clean = state.selfClean ? Number(state.cleanHours) || 0 : 0;
-  return (Number(state.before) || 0) + (Number(state.during) || 0) + (Number(state.after) || 0) + clean;
+function stayHours() {
+  return HOUR_PER_STAY.reduce((sum, id) => sum + (Number(state[id]) || 0), 0);
+}
+
+function monthlyOverhead() {
+  return HOUR_MONTHLY.reduce((sum, id) => sum + (Number(state[id]) || 0), 0);
+}
+
+function perStayCosts() {
+  return COST_FIELDS.reduce((sum, id) => sum + (Number(state[id]) || 0), 0);
 }
 
 function monthMath(nightly, nights) {
   const stayLen = STAY_NIGHTS[state.property];
   const stays = nights / stayLen;
   const payout = nightly * nights * (1 - FEE);
-  const costs = stays * ((Number(state.cleanCost) || 0) + (Number(state.otherCost) || 0));
+  const costs = stays * perStayCosts();
   const net = payout - costs;
-  const hours = stays * hoursPerStay();
-  return { stayLen, stays, payout, costs, net, hours, hourly: hours > 0 ? net / hours : null };
+  const perStay = stayHours();
+  const hours = stays * perStay;
+  const allHours = hours + monthlyOverhead();
+  return {
+    stayLen,
+    stays,
+    payout,
+    costs,
+    net,
+    hours,
+    perStay,
+    allHours,
+    hourly: hours > 0 ? net / hours : null,
+    allInHourly: allHours > 0 ? net / allHours : null,
+  };
 }
 
 function readNumbers() {
-  const ids = ["rate", "nights", "before", "during", "after", "cleanHours", "cleanCost", "otherCost"];
-  ids.forEach((id) => {
+  ["rate", "nights", ...HOUR_PER_STAY, ...HOUR_MONTHLY, ...COST_FIELDS].forEach((id) => {
     const el = document.getElementById(id);
-    if (el) state[id] = el.value;
+    if (!el) return;
+    state[id] = el.value === "" ? "" : Number(el.value);
   });
 }
 
@@ -122,22 +181,21 @@ function validate(step) {
   if (step === 1) {
     const rate = Number(state.rate);
     const nights = Number(state.nights);
-    if (state.rate === "" || state.nights === "") return "Add your nightly rate and a normal month of nights.";
+    if (state.rate === "" || state.nights === "") return "The listing needs a nightly rate and nights booked.";
     if (!Number.isFinite(rate) || rate < 40 || rate > 1500) return "Use a nightly rate between $40 and $1,500.";
     if (!Number.isFinite(nights) || nights < 0 || nights > 30) return "Nights booked should be between 0 and 30.";
   }
   if (step === 2) {
-    for (const id of ["before", "during", "after"]) {
+    for (const id of HOUR_PER_STAY) {
       const n = Number(state[id]);
-      if (!Number.isFinite(n) || n < 0 || n > 20) return "Hours need to be between 0 and 20.";
+      const max = id === "cleaning" ? 12 : 20;
+      if (!Number.isFinite(n) || n < 0 || n > max) return "Hours per stay need to stay in a realistic range.";
     }
-    if (state.selfClean) {
-      const n = Number(state.cleanHours);
-      if (!Number.isFinite(n) || n < 0 || n > 12) return "Cleaning hours need to be between 0 and 12.";
+    for (const id of HOUR_MONTHLY) {
+      const n = Number(state[id]);
+      if (!Number.isFinite(n) || n < 0 || n > 40) return "Hours between stays need to be between 0 and 40 a month.";
     }
-  }
-  if (step === 3) {
-    for (const id of ["cleanCost", "otherCost"]) {
+    for (const id of COST_FIELDS) {
       const n = Number(state[id]);
       if (!Number.isFinite(n) || n < 0 || n > 2000) return "Costs need to be between $0 and $2,000 per stay.";
     }
@@ -148,8 +206,7 @@ function validate(step) {
 function render() {
   renderStepper();
   if (state.step === 1) renderListing();
-  else if (state.step === 2) renderTime();
-  else if (state.step === 3) renderCosts();
+  else if (state.step === 2) renderWork();
   else renderResults();
 }
 
@@ -157,11 +214,35 @@ function errorHtml() {
   return state.error ? `<p class="error" role="alert">${state.error}</p>` : "";
 }
 
+function bedroomLabel() {
+  return Number(state.bedrooms) >= 4 ? "4+" : String(state.bedrooms);
+}
+
 function renderListing() {
+  if (!state.editingListing) {
+    app.innerHTML = `
+      <form class="card" id="form">
+        <h2>Your listing</h2>
+        <p class="help">Already on your account. This uses a normal recent month, not your best one.</p>
+        <dl class="confirm">
+          <div><dt>Property</dt><dd>${bedroomLabel()}-bedroom ${PROPERTY_LABEL[state.property].toLowerCase()}</dd></div>
+          <div><dt>Market</dt><dd>${CITY_LABEL[state.city]}</dd></div>
+          <div><dt>Nightly rate</dt><dd>${money(state.rate)}</dd></div>
+          <div><dt>Nights in a normal month</dt><dd>${state.nights}</dd></div>
+        </dl>
+        ${errorHtml()}
+        <div class="row">
+          <button class="primary" type="submit">This looks right</button>
+        </div>
+        <button class="linkish" type="button" id="adjust">Not your listing? Adjust</button>
+      </form>`;
+    return;
+  }
+
   app.innerHTML = `
     <form class="card" id="form">
-      <h2>Your listing</h2>
-      <p class="help">Use a normal month, not your best month.</p>
+      <h2>Adjust your listing</h2>
+      <p class="help">In the product these fields are already filled. Change anything that’s off. Use a normal month, not your best month.</p>
       <div class="field">
         <span class="group-label">Market</span>
         <div class="choices">
@@ -181,10 +262,10 @@ function renderListing() {
       <div class="field">
         <span class="group-label">Bedrooms</span>
         <div class="choices">
-          ${choice("bedrooms", "1", "1", String(state.bedrooms))}
-          ${choice("bedrooms", "2", "2", String(state.bedrooms))}
-          ${choice("bedrooms", "3", "3", String(state.bedrooms))}
-          ${choice("bedrooms", "4", "4+", String(state.bedrooms))}
+          ${choice("bedrooms", "1", "1", state.bedrooms)}
+          ${choice("bedrooms", "2", "2", state.bedrooms)}
+          ${choice("bedrooms", "3", "3", state.bedrooms)}
+          ${choice("bedrooms", "4", "4+", state.bedrooms)}
         </div>
       </div>
       ${numField("rate", "Current nightly rate (USD)", state.rate, "1", "40", "1500")}
@@ -193,44 +274,50 @@ function renderListing() {
       <div class="row">
         <button class="primary" type="submit">Continue</button>
       </div>
-      <button class="linkish" type="button" id="example">Load an example host</button>
+      <button class="linkish" type="button" id="example">Reset example listing</button>
     </form>`;
 }
 
-function renderTime() {
-  const clean = state.selfClean
-    ? numField("cleanHours", "Extra hours you spend cleaning", state.cleanHours, "0.5", "0", "12")
-    : "";
+function renderWork() {
+  const cleaningRow = state.selfClean
+    ? activityRow("cleaning", "Cleaning, if you do it yourself", state.cleaning, 0.5, 0, 12, "hr")
+    : `<div class="activity"><span class="static-label">Cleaning</span><span class="static-value">Someone you hire</span></div>`;
+
   app.innerHTML = `
     <form class="card" id="form">
-      <h2>Time per booked stay</h2>
-      <p class="help">Count the time you actually spend, including the texts.</p>
-      ${numField("before", "Hours before the stay", state.before, "0.5", "0", "20")}
-      ${numField("during", "Hours during the stay", state.during, "0.5", "0", "20")}
-      ${numField("after", "Hours after the stay", state.after, "0.5", "0", "20")}
+      <h2>Your time and costs</h2>
+      <p class="help">Hours are per booked stay unless the row says per month. Costs start at zero. Change only what you actually pay.</p>
+
+      <p class="phase">Before the stay</p>
+      ${activityRow("msgBefore", "Guest messages and coordination", state.msgBefore, 0.5, 0, 20, "hr")}
+      ${activityRow("prepCheckin", "Prep and check-in", state.prepCheckin, 0.5, 0, 20, "hr")}
+
+      <p class="phase">During the stay</p>
+      ${activityRow("guestDuring", "Guest questions and issues", state.guestDuring, 0.5, 0, 20, "hr")}
+
+      <p class="phase">After the stay</p>
       <div class="field">
-        <span class="group-label">Do you do the cleaning yourself?</span>
+        <span class="group-label">Who cleans?</span>
         <div class="choices">
-          ${choice("selfClean", "yes", "Yes", state.selfClean ? "yes" : "no")}
-          ${choice("selfClean", "no", "No", state.selfClean ? "yes" : "no")}
+          ${choice("selfClean", "yes", "I do", state.selfClean ? "yes" : "no")}
+          ${choice("selfClean", "no", "I hire someone", state.selfClean ? "yes" : "no")}
         </div>
       </div>
-      ${clean}
-      ${errorHtml()}
-      <div class="row">
-        <button class="ghost" type="button" id="back">Back</button>
-        <button class="primary" type="submit">Continue</button>
-      </div>
-    </form>`;
-}
+      ${activityRow("checkoutReset", "Checkout, inspection, reset", state.checkoutReset, 0.5, 0, 20, "hr")}
+      ${cleaningRow}
+      ${activityRow("reviewFollowup", "Review and follow-up", state.reviewFollowup, 0.5, 0, 20, "hr")}
 
-function renderCosts() {
-  app.innerHTML = `
-    <form class="card" id="form">
-      <h2>Costs you already feel</h2>
-      <p class="help">A flat 15% stands in for host fees. This is a model, not your payout statement.</p>
-      ${numField("cleanCost", "Cleaning and supplies per stay (USD)", state.cleanCost, "1", "0", "2000")}
-      ${numField("otherCost", "Other costs per stay (restock, laundry, small repairs)", state.otherCost, "1", "0", "2000")}
+      <p class="phase">Between stays, per month</p>
+      ${activityRow("calendarPricing", "Calendar, pricing, listing updates", state.calendarPricing, 0.5, 0, 40, "hr")}
+      ${activityRow("maintenanceAdmin", "Photos, restocking, scheduling repairs", state.maintenanceAdmin, 0.5, 0, 40, "hr")}
+
+      <p class="phase">Costs per stay</p>
+      <p class="help cost-note">A flat 15% stands in for host fees. It is not a payout statement.</p>
+      ${activityRow("cleaningCost", "Cleaning service", state.cleaningCost, 5, 0, 2000, "$")}
+      ${activityRow("suppliesCost", "Supplies and restocking", state.suppliesCost, 5, 0, 2000, "$")}
+      ${activityRow("laundryCost", "Laundry", state.laundryCost, 5, 0, 2000, "$")}
+      ${activityRow("repairsCost", "Small repairs and maintenance", state.repairsCost, 5, 0, 2000, "$")}
+
       ${errorHtml()}
       <div class="row">
         <button class="ghost" type="button" id="back">Back</button>
@@ -260,20 +347,25 @@ function renderResults() {
   const newNights = nights * factor;
   const next = monthMath(newRate, newNights);
   const delta = next.net - current.net;
-  const hours = hoursPerStay();
+  const hours = current.perStay;
   const typical = state.selfClean ? BENCH[state.property].self : BENCH[state.property].hire;
 
   let place = `Your rate of ${money(rate)} sits inside this simulated band.`;
   if (rate < band.low) place = `Your rate of ${money(rate)} is under this simulated band.`;
   if (rate > band.high) place = `Your rate of ${money(rate)} is above this simulated band.`;
 
+  const allInLine = current.hourly !== null && current.allInHourly !== null
+    ? `<p class="plain" id="all-in">Including listing management: ${hourlyText(current.allInHourly)} all-in.</p>`
+    : "";
+
   const hourlyBlock = nights <= 0
     ? `<p class="metric">—</p><p class="metric-label">Add nights from a normal month to see an hourly rate.</p>`
     : current.hourly === null
       ? `<p class="metric">—</p><p class="metric-label">Add your hours to see a rate.</p>`
       : `<p class="metric">${hourlyText(current.hourly)}</p>
-         <p class="metric-label">Effective hourly rate this month</p>
-         <p class="plain">About ${money(current.net)} after the 15% fee and per-stay costs, spread across ${current.hours.toFixed(1)} hours.</p>`;
+         <p class="metric-label">Per stay, after the 15% fee and costs</p>
+         <p class="plain">About ${money(current.net)} this month, spread across ${current.hours.toFixed(1)} hours of stay work.</p>
+         ${allInLine}`;
 
   const noisy = nights > 0 && nights < STAY_NIGHTS[state.property]
     ? `<p class="plain">Fewer nights than a typical stay, so this month’s hourly rate is noisy.</p>`
@@ -305,7 +397,7 @@ function renderResults() {
       <div class="block">
         <p class="tag">Simulated</p>
         <h3>Time versus a typical host</h3>
-        <p class="plain">You logged ${hours.toFixed(1)} hours per stay. The benchmark for this listing is ${typical} hours.</p>
+        <p class="plain">You logged ${hours.toFixed(1)} hours per stay, not counting listing management. The benchmark for this listing is ${typical} hours.</p>
         <p class="plain">${effortCopy(hours, typical)}</p>
       </div>
 
@@ -315,7 +407,7 @@ function renderResults() {
 
       <details class="assumptions">
         <summary>How these numbers are calculated</summary>
-        <p>Host payout is nightly rate times nights, minus 15%. Stays are nights divided by ${STAY_NIGHTS[state.property]} (the assumed stay length for this property type). Costs scale with stays. Hourly rate is payout minus costs, divided by hours. The market band starts from a fixed table and rises 12% for each bedroom after the first. Occupancy steps are fixed: +10% price assumes 94% of current nights, +15% assumes 90%, and so on.</p>
+        <p>Host payout is nightly rate times nights, minus 15%. Stays are nights divided by ${STAY_NIGHTS[state.property]} (the assumed stay length for this property type). Per-stay costs scale with stays. The big hourly rate is payout minus costs, divided by stay hours only. The all-in rate adds hours you spend between stays, which are monthly and do not grow with each booking. The market band starts from a fixed table and rises 12% for each bedroom after the first. Occupancy steps are fixed: +10% price assumes 94% of current nights, +15% assumes 90%, and so on.</p>
       </details>
 
       <div class="row">
@@ -350,47 +442,73 @@ function paintScenario() {
   deltaEl.classList.toggle("down", delta < 0);
 }
 
+function setSelfClean(yes) {
+  state.selfClean = yes;
+  if (yes) {
+    state.cleaning = 2.5;
+    state.cleaningCost = 0;
+  } else {
+    state.cleaning = 0;
+    state.cleaningCost = 75;
+  }
+}
+
 app.addEventListener("click", (e) => {
+  const bump = e.target.closest("[data-bump]");
+  if (bump) {
+    readNumbers();
+    const id = bump.dataset.bump;
+    const step = Number(bump.dataset.step);
+    const min = Number(bump.dataset.min);
+    const max = Number(bump.dataset.max);
+    const dir = Number(bump.dataset.dir);
+    let next = (Number(state[id]) || 0) + dir * step;
+    next = Math.min(max, Math.max(min, Math.round(next * 100) / 100));
+    state[id] = next;
+    render();
+    return;
+  }
+
   const setBtn = e.target.closest("[data-set]");
   if (setBtn) {
     readNumbers();
     const key = setBtn.dataset.set;
     let value = setBtn.dataset.value;
     if (key === "bedrooms") value = Number(value);
-    if (key === "selfClean") value = value === "yes";
+    if (key === "selfClean") {
+      setSelfClean(value === "yes");
+      render();
+      return;
+    }
     state[key] = value;
     render();
     return;
   }
-  if (e.target.id === "example") {
-    state.city = "mid";
-    state.property = "entire";
-    state.bedrooms = 2;
-    state.rate = "119";
-    state.nights = "20";
-    state.before = 1.5;
-    state.during = 0.5;
-    state.after = 2;
-    state.selfClean = true;
-    state.cleanHours = 3;
-    state.cleanCost = 75;
-    state.otherCost = 25;
-    state.priceDelta = 0;
+
+  if (e.target.id === "adjust") {
+    state.editingListing = true;
     state.error = "";
-    state.step = 1;
     render();
+    return;
   }
+
+  if (e.target.id === "example") {
+    applyDefaults();
+    state.editingListing = true;
+    render();
+    return;
+  }
+
   if (e.target.id === "back") {
     readNumbers();
     state.error = "";
     state.step = Math.max(1, state.step - 1);
+    if (state.step === 1) state.editingListing = false;
     render();
   }
+
   if (e.target.id === "restart") {
-    state.step = 1;
-    state.rate = "";
-    state.nights = "";
-    state.error = "";
+    applyDefaults();
     render();
   }
 });

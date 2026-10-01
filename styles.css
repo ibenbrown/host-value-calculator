@@ -51,7 +51,7 @@ h1 {
 
 .steps {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
   list-style: none;
   padding: 0;
@@ -277,5 +277,92 @@ input[type="range"] {
 .fine {
   margin-top: 18px;
   font-size: 12px;
+  color: var(--muted);
+}
+
+.confirm { margin: 0 0 8px; }
+
+.confirm div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.confirm dt {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.confirm dd {
+  margin: 0;
+  font-weight: 600;
+  text-align: right;
+}
+
+.phase {
+  margin: 18px 0 4px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.cost-note { margin-top: 0; }
+
+.activity {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.activity label,
+.static-label {
+  font-size: 14px;
+  font-weight: 500;
+  margin: 0;
+  flex: 1;
+}
+
+.static-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.stepper button {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: #fff;
+  font: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.stepper input[type="number"] {
+  width: 72px;
+  text-align: center;
+  padding: 8px 4px;
+}
+
+.unit {
+  width: 1.2em;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--muted);
 }
