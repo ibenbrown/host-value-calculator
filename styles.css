@@ -1,0 +1,281 @@
+:root {
+  --ink: #222222;
+  --muted: #717171;
+  --line: #dddddd;
+  --fog: #f7f7f7;
+  --card: #ffffff;
+  --coral: #ff5a5f;
+  --coral-dark: #e31c5f;
+  --teal: #00a699;
+  --shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+  --radius: 14px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background: var(--fog);
+  font-family: "Plus Jakarta Sans", "Segoe UI", sans-serif;
+  line-height: 1.45;
+}
+
+.page {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 28px 20px 48px;
+}
+
+.kicker {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--coral);
+}
+
+h1 {
+  margin: 0;
+  font-size: 34px;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.lede {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 16px;
+}
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  list-style: none;
+  padding: 0;
+  margin: 22px 0 18px;
+}
+
+.steps li {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  padding-top: 8px;
+  border-top: 3px solid var(--line);
+}
+
+.steps li.is-current {
+  color: var(--ink);
+  border-top-color: var(--coral);
+}
+
+.steps li.is-done {
+  color: var(--ink);
+  border-top-color: var(--teal);
+}
+
+.card {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 22px 20px 20px;
+}
+
+h2 {
+  margin: 0 0 4px;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+}
+
+.help {
+  margin: 0 0 18px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.field { margin-bottom: 16px; }
+
+.field label,
+.group-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.choices button {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.choices button[aria-pressed="true"] {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: #fff;
+}
+
+input[type="number"] {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font: inherit;
+  font-size: 16px;
+  color: var(--ink);
+}
+
+input[type="number"]:focus,
+.choices button:focus-visible,
+.primary:focus-visible,
+.ghost:focus-visible,
+.linkish:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.row {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.primary, .ghost, .linkish {
+  font: inherit;
+  cursor: pointer;
+  border-radius: 12px;
+}
+
+.primary {
+  flex: 1;
+  border: 0;
+  background: var(--coral);
+  color: #fff;
+  font-weight: 700;
+  padding: 14px 16px;
+  font-size: 16px;
+}
+
+.primary:hover { background: var(--coral-dark); }
+
+.primary:disabled {
+  background: #ddd;
+  color: #fff;
+  cursor: not-allowed;
+}
+
+.ghost, .linkish {
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  font-weight: 600;
+  padding: 14px 16px;
+}
+
+.linkish {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 8px 0 0;
+  text-decoration: underline;
+  font-size: 14px;
+}
+
+.error {
+  color: #c13515;
+  font-size: 13px;
+  margin: -6px 0 12px;
+}
+
+.metric {
+  margin: 8px 0 4px;
+  font-size: 56px;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  color: var(--coral);
+  font-weight: 700;
+}
+
+.metric-label {
+  margin: 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.plain {
+  margin: 12px 0 0;
+  font-size: 14px;
+}
+
+.block {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.block h3 {
+  margin: 0 0 6px;
+  font-size: 16px;
+}
+
+.tag {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--teal);
+  margin-bottom: 6px;
+}
+
+.band {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0;
+}
+
+input[type="range"] {
+  width: 100%;
+  accent-color: var(--coral);
+}
+
+.delta {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 8px 0 0;
+}
+
+.delta.up { color: var(--teal); }
+.delta.down { color: #c13515; }
+
+.assumptions {
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.assumptions summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.fine {
+  margin-top: 18px;
+  font-size: 12px;
+  color: var(--muted);
+}
